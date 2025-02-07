@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: smtp
+email-address: test@test.com
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  rabbitmq:
+    host: email-rabbit
+  mail:
+    host: smtp-server
+    port: 8025
+    username: ""
+    password: ""
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+            required: false

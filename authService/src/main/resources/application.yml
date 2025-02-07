@@ -1,0 +1,37 @@
+server:
+  port: 9999
+  servlet:
+    context-path: "/authentication"
+spring:
+  application:
+    name: authService
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/blog
+    username: postgres
+    password: postgres
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+rabbit:
+  email-exchange: EmailExchange
+  email-routing-key: SEND_EMAIL
+jwt:
+  public:
+    key: classpath:keys/public_key.pem
+  private:
+    key: classpath:keys/private_key.pem
+  expiration: 86400000
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:postgresql://db:5432/blog
+  rabbitmq:
+    host: email-rabbit

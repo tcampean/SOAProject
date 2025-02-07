@@ -1,0 +1,160 @@
+services:
+  web-main:
+    build:
+      context: frontend/container
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/container:/app
+      - ./frontend/container/node_modules:/app/node_modules
+    env_file:
+      - .env
+    stdin_open: true
+    tty: true
+    command: npm start
+
+  web-component:
+    build:
+      context: frontend/users
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./frontend/users:/app
+      - ./frontend/users/node_modules:/app/node_modules
+    env_file:
+      - .env
+    stdin_open: true
+    tty: true
+    command: npm start
+
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      PGUSER: postgres
+      POSTGRES_DB: blog
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./db_data:/var/lib/postgresql/data
+      - ./db_setup/init.sql:/docker-entrypoint-initdb.d/create_tables.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready" ]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+
+  rest-api:
+    build:
+      context: restAPI
+      dockerfile: Dockerfile
+    image: rest-api:latest
+    environment:
+      - "SPRING_PROFILES_ACTIVE=docker"
+    ports:
+      - "8888"
+    depends_on:
+      db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    deploy:
+      mode: replicated
+      replicas: 2
+
+  auth-service:
+    build:
+      context: authService
+      dockerfile: Dockerfile
+    image: auth-service:latest
+    environment:
+      - "SPRING_PROFILES_ACTIVE=docker"
+    ports:
+      - "9999"
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    deploy:
+      mode: replicated
+      replicas: 2
+
+  smtp-service:
+    build:
+      context: smtpService
+      dockerfile: Dockerfile
+    image: smtp-service:latest
+    environment:
+      - "SPRING_PROFILES_ACTIVE=docker"
+    depends_on:
+      - rabbitmq
+
+  kafka-service:
+    build:
+      context: kafkaService
+      dockerfile: Dockerfile
+    image: kafka-service:latest
+    environment:
+      - "SPRING_PROFILES_ACTIVE=docker"
+    depends_on:
+      - kafka
+
+  nginx:
+    image: nginx:latest
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - rest-api
+      - auth-service
+    ports:
+      - "4000:4000"
+
+  smtp-server:
+    image: gessnerfl/fake-smtp-server:latest
+    ports:
+      - "7777:8080"
+      - "8081:8081"
+      - "8025:8025"
+
+  rabbitmq:
+    image: "rabbitmq:3-management"
+    hostname: "email-rabbit"
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - "./rabbit-data:/var/lib/rabbitmq/mnesia/"
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:5.1.0
+    hostname: zookeeper
+    ports:
+      - 2181:2181
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+  kafka:
+    image: confluentinc/cp-kafka:5.1.0
+    ports:
+      - 9092:9092
+      - 29092:29092
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_LOG4J_LOGGERS: "kafka.controller=INFO,kafka.request.logger=WARN"
+      KAFKA_LOG4J_ROOT_LOGLEVEL: WARN
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    hostname: kafka
+    restart: unless-stopped
