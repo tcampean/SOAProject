@@ -60,6 +60,7 @@ The SMTP microservice is responsible for handling email delivery. It operates as
 * `RegistrationEmailListener` listens to the EmailQueue in RabbitMQ to process email-related messages.
 * `EmailSender` connects to the configured SMTP server to send outgoing emails.
 
+![UML_diagram](./images/email_uml.PNG)
 
 ### Logging Service
 
